@@ -52,7 +52,7 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      bottom: calc(env(safe-area-inset-bottom,20px) + 20px);
+      bottom: calc(env(safe-area-inset-bottom,20px) + 50px);
       display: flex;
       gap: 20px;
       z-index: 30;
@@ -72,10 +72,11 @@
   <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Background music element -->
+    <!-- Background music -->
     <audio
       id="bgMusic"
       src="https://suno.com/song/0c710bf5-e07e-4160-9a30-082860458329?sh=NWV1sZ4XCtsFdoJk"
+      preload="auto"
       loop
       crossorigin="anonymous"
     ></audio>
@@ -111,11 +112,10 @@
   </div>
 
   <script>
-  // ——— Globals & Init ———
+  // ——— Constants & Globals ———
   const TOUCH_CROSSHAIR_OFFSET = 80;
   let canvas, ctx, game;
   const KEY = { left:false, right:false, shoot:false };
-
   const levels = [
     { name:"Gator Yoinking",  emoji:"🐊", type:"alligator", spawn:2000 },
     { name:"Husky Fur Storm", emoji:"🐕", type:"fur",       spawn:1500 },
@@ -123,12 +123,14 @@
     { name:"Chicken Chase",   emoji:"🐔", type:"chicken",   spawn: 800 },
   ];
 
+  // ——— Initialization ———
   function initGame(){
     canvas = document.getElementById("gameCanvas");
     ctx = canvas.getContext("2d");
     resize();
     window.addEventListener("resize", resize);
     setupInput();
+    unlockAudio(); // unlock on first touch
     game = makeNewGame();
   }
 
@@ -153,9 +155,22 @@
     if(game) game.player.y = canvas.height - 100;
   }
 
-  // ——— Input ———
+  // ——— Audio Unlock Hack ———
+  function unlockAudio(){
+    const bg = document.getElementById('bgMusic');
+    function onceTouch(){
+      bg.play().then(()=> {
+        bg.pause();
+        bg.currentTime = 0;
+      }).catch(()=>{});
+      document.body.removeEventListener('touchstart', onceTouch);
+    }
+    document.body.addEventListener('touchstart', onceTouch, { passive:false });
+  }
+
+  // ——— Input Handling ———
   function setupInput(){
-    // Pointer (mouse/touch/stylus)
+    // Pointer events
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
       game.pointer.realX   = e.clientX - r.left;
@@ -169,9 +184,9 @@
       game.pointer.isTouch = e.pointerType === "touch";
       if(game.running) KEY.shoot = true;
     });
-    canvas.addEventListener("pointerup",   e=>{ KEY.shoot = false; });
+    canvas.addEventListener("pointerup", e=>{ KEY.shoot = false; });
 
-    // Keyboard (desktop)
+    // Keyboard
     window.addEventListener("keydown", e=>{
       if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left  = true;
       if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right = true;
@@ -183,23 +198,22 @@
       if(e.code==="Space")                      KEY.shoot = false;
     });
 
-    // On-screen mobile buttons
+    // Mobile buttons
     ['pointerdown','touchstart'].forEach(evt=>{
-      document.getElementById('leftBtn').addEventListener(evt, e=>{ e.preventDefault(); KEY.left  = true; });
+      document.getElementById('leftBtn') .addEventListener(evt,e=>{ e.preventDefault(); KEY.left  = true; });
       document.getElementById('rightBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.right = true; });
-      document.getElementById('shootBtn').addEventListener(evt, e=>{ e.preventDefault(); KEY.shoot = true; });
+      document.getElementById('shootBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = true; });
     });
     ['pointerup','pointercancel','touchend','touchcancel'].forEach(evt=>{
-      document.getElementById('leftBtn').addEventListener(evt, e=>{ e.preventDefault(); KEY.left  = false; });
+      document.getElementById('leftBtn') .addEventListener(evt,e=>{ e.preventDefault(); KEY.left  = false; });
       document.getElementById('rightBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.right = false; });
-      document.getElementById('shootBtn').addEventListener(evt, e=>{ e.preventDefault(); KEY.shoot = false; });
+      document.getElementById('shootBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = false; });
     });
   }
 
-  // ——— Start/Restart ———
+  // ——— Start & Restart ———
   function startGame(){
     document.getElementById("startScreen").style.display = "none";
-    // reset and run
     game = makeNewGame();
     game.running = true;
     showLevel();
@@ -207,11 +221,9 @@
     spawnPowerUps();
     game.lastTime = performance.now();
 
-    // play music
     const bg = document.getElementById('bgMusic');
-    bg.currentTime = 0;
     bg.volume = 0.5;
-    bg.play().catch(()=>{/* autoplay might require user gesture */});
+    bg.play().catch(()=>{});
 
     requestAnimationFrame(loop);
   }
@@ -222,7 +234,7 @@
 
   // ——— Level Indicator ———
   function showLevel(){
-    const lvl = levels[Math.min(game.level-1,levels.length-1)];
+    const lvl = levels[Math.min(game.level-1, levels.length-1)];
     const di = document.getElementById("levelIndicator");
     di.innerHTML = `Level ${game.level}<br>${lvl.emoji} ${lvl.name}`;
     di.style.opacity = 1;
@@ -232,26 +244,23 @@
   // ——— Spawning ———
   function spawnEnemies(){
     if(!game.running) return;
-    let cfg;
-    if(game.level <= levels.length) {
-      cfg = levels[game.level-1];
-    } else {
-      cfg = levels[Math.floor(Math.random()*levels.length)];
-    }
+    let cfg = game.level <= levels.length
+      ? levels[game.level-1]
+      : levels[Math.floor(Math.random()*levels.length)];
+
     const e = {
       x: Math.random()*(canvas.width-40),
       y:-40, w:40, h:40,
       type:cfg.type, emoji:cfg.emoji,
       speed:2+game.level*0.5, vx:0, vy:0
     };
-    if(e.type==="fur")     { e.vx=(Math.random()-0.5)*4; e.vy=2; }
-    if(e.type==="bee")     { e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
-    if(e.type==="chicken"){ e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
+    if(e.type==="fur"){       e.vx=(Math.random()-0.5)*4; e.vy=2; }
+    if(e.type==="bee"){       e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
+    if(e.type==="chicken"){   e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
 
     game.enemies.push(e);
     setTimeout(spawnEnemies, Math.max(200, cfg.spawn - game.level*50));
   }
-
   function spawnPowerUps(){
     if(!game.running) return;
     if(Math.random()<0.3){
@@ -270,7 +279,7 @@
     const delta = now - game.lastTime;
     game.lastTime = now;
 
-    // bonus points every 3s
+    // bonus points
     game.bonusTimer += delta;
     if(game.bonusTimer >= 3000){
       game.bonusTimer -= 3000;
@@ -295,7 +304,6 @@
     if(KEY.right) game.player.x += 5;
     game.player.x = Math.max(0, Math.min(canvas.width-game.player.w, game.player.x));
   }
-
   function handleShooting(){
     if(!KEY.shoot || game.pointer.cooldown>0) return;
     game.pointer.cooldown = 15;
@@ -347,7 +355,6 @@
         en.y < game.player.y+game.player.h &&
         en.y+en.h>game.player.y
       );
-
       if(hit){
         if(en.type==="chicken"){
           let pts = 60;
@@ -377,8 +384,7 @@
         game.sudafed++;
         game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
         game.powerUps.splice(i,1);
-      }
-      else if(p.y>canvas.height){
+      } else if(p.y>canvas.height){
         game.powerUps.splice(i,1);
       }
     });
@@ -390,21 +396,15 @@
   function drawAll(){
     ctx.font="50px Arial"; ctx.textAlign="center";
     ctx.fillText("🤠", game.player.x+game.player.w/2, game.player.y+game.player.h);
-
     game.enemies.forEach(en=>{
-      ctx.font="35px Arial";
-      ctx.fillText(en.emoji, en.x+en.w/2, en.y+en.h);
+      ctx.font="35px Arial"; ctx.fillText(en.emoji, en.x+en.w/2, en.y+en.h);
     });
-
     game.powerUps.forEach(p=>{
-      ctx.font="30px Arial";
-      ctx.fillText("💊", p.x+20, p.y+30);
+      ctx.font="30px Arial"; ctx.fillText("💊", p.x+20, p.y+30);
     });
-
     ctx.font="40px Arial";
-    game.explosions.forEach(ex=> ctx.fillText("💥", ex.x, ex.y) );
-
-    // draw crosshair above finger on touch
+    game.explosions.forEach(ex=> ctx.fillText("💥", ex.x, ex.y));
+    // Draw crosshair above touch
     const x = game.pointer.realX;
     const y0 = game.pointer.realY;
     const y  = y0 - (game.pointer.isTouch ? TOUCH_CROSSHAIR_OFFSET : 0);
@@ -418,14 +418,13 @@
     ctx.restore();
   }
 
-  // ——— UI, Levels & Game Over ———
+  // ——— UI & Game Over ———
   function updateUI(){
     document.getElementById("score").textContent  = game.score;
     document.getElementById("level").textContent  = game.level;
     document.getElementById("lives").textContent  = game.lives;
     document.getElementById("sudafed").textContent = game.sudafed;
   }
-
   function checkLevelUp(){
     if(game.score >= game.level*500){
       game.level++;
@@ -433,16 +432,11 @@
       showLevel();
     }
   }
-
   function checkGameOver(){
     if(game.lives <= 0){
       game.running = false;
-
-      // pause music
       document.getElementById('bgMusic').pause();
-
-      document.getElementById("finalScore").textContent =
-        `Final Score: ${game.score}`;
+      document.getElementById("finalScore").textContent = `Final Score: ${game.score}`;
       const msgs = [
         "Even Hurricane Tobias needs a break!",
         "The bees were too aggressive!",
