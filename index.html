@@ -52,8 +52,7 @@
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
-      /* push up by the bottom safe-area inset (iPhone notch devices) + 20px */
-      bottom: calc(env(safe-area-inset-bottom, 20px) + 40px);
+      bottom: calc(env(safe-area-inset-bottom,20px) + 20px);
       display: flex;
       gap: 20px;
       z-index: 30;
@@ -64,7 +63,6 @@
       background:rgba(255,255,255,0.6);
       font-size:1.5em; touch-action:none;
     }
-    /* hide on desktop-like devices */
     @media (hover: hover) and (pointer: fine) {
       #mobileControls { display:none; }
     }
@@ -97,7 +95,6 @@
       <button onclick="restartGame()">PLAY AGAIN</button>
     </div>
 
-    <!-- On-screen mobile controls -->
     <div id="mobileControls">
       <button id="leftBtn">◀️</button>
       <button id="shootBtn">●</button>
@@ -107,6 +104,8 @@
 
   <script>
   // ——— Globals & Init ———
+  const TOUCH_CROSSHAIR_OFFSET = 80;
+
   let canvas, ctx, game;
   const KEY = { left:false, right:false, shoot:false };
 
@@ -136,7 +135,7 @@
       lastTime:0,
       player:{ x:innerWidth/2-30, y:innerHeight-100, w:60, h:60 },
       enemies:[], powerUps:[], explosions:[],
-      pointer:{ x:innerWidth/2, y:innerHeight/2, cooldown:0 },
+      pointer:{ realX:innerWidth/2, realY:innerHeight/2, isTouch:false, cooldown:0 },
       running:false
     };
   }
@@ -150,14 +149,21 @@
 
   // ——— Input ———
   function setupInput(){
-    // Pointer for mouse/touch
+    // Pointer
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
-      game.pointer.x = e.clientX - r.left;
-      game.pointer.y = e.clientY - r.top;
+      game.pointer.realX   = e.clientX - r.left;
+      game.pointer.realY   = e.clientY - r.top;
+      game.pointer.isTouch = e.pointerType === "touch";
     });
-    canvas.addEventListener("pointerdown", e=>{ if(game.running) KEY.shoot=true; });
-    canvas.addEventListener("pointerup",   e=>{ KEY.shoot=false; });
+    canvas.addEventListener("pointerdown", e=>{
+      const r = canvas.getBoundingClientRect();
+      game.pointer.realX   = e.clientX - r.left;
+      game.pointer.realY   = e.clientY - r.top;
+      game.pointer.isTouch = e.pointerType === "touch";
+      if(game.running) KEY.shoot = true;
+    });
+    canvas.addEventListener("pointerup",   e=>{ KEY.shoot = false; });
 
     // Keyboard
     window.addEventListener("keydown", e=>{
@@ -171,7 +177,7 @@
       if(e.code==="Space") KEY.shoot=false;
     });
 
-    // Mobile on-screen buttons
+    // Mobile buttons
     ['pointerdown','touchstart'].forEach(evt=>{
       document.getElementById('leftBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.left=true; });
       document.getElementById('rightBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.right=true; });
@@ -215,15 +221,12 @@
   // ——— Spawning ———
   function spawnEnemies(){
     if(!game.running) return;
-
     let cfg;
     if (game.level <= levels.length) {
       cfg = levels[game.level-1];
     } else {
-      // level 5+ random from all
       cfg = levels[Math.floor(Math.random()*levels.length)];
     }
-
     const e = {
       x: Math.random()*(canvas.width-40),
       y:-40, w:40, h:40,
@@ -256,8 +259,6 @@
     if(!game.running) return;
     const delta = now - game.lastTime;
     game.lastTime = now;
-
-    // bonus every 3s
     game.bonusTimer += delta;
     if(game.bonusTimer >= 3000){
       game.bonusTimer -= 3000;
@@ -289,12 +290,13 @@
     if(!KEY.shoot || game.pointer.cooldown>0) return;
     game.pointer.cooldown = 15;
 
+    const px = game.pointer.realX, py = game.pointer.realY;
+
     game.enemies = game.enemies.filter(en=>{
-      const dx = game.pointer.x - (en.x+en.w/2);
-      const dy = game.pointer.y - (en.y+en.h/2);
+      const dx = px - (en.x+en.w/2);
+      const dy = py - (en.y+en.h/2);
       if(Math.hypot(dx,dy) < 30+en.w/2) {
         if(en.type==="fur"||en.type==="bee"){
-          // penalty & lose life
           const pen = en.type==="fur"?50:75;
           game.score = Math.max(0, game.score - pen);
           game.lives--;
@@ -310,8 +312,8 @@
     });
 
     game.powerUps = game.powerUps.filter(p=>{
-      const dx = game.pointer.x - (p.x+20);
-      const dy = game.pointer.y - (p.y+20);
+      const dx = px - (p.x+20);
+      const dy = py - (p.y+20);
       if(Math.hypot(dx,dy) < 30){
         game.sudafed++;
         game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
@@ -346,7 +348,6 @@
           if(game.sudafed>0){ pts*=2; game.sudafed--; }
           game.score += pts;
         } else {
-          // alligator/fur/bee collision
           game.lives--;
         }
         game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
@@ -399,14 +400,16 @@
     game.explosions.forEach(ex=> ctx.fillText("💥", ex.x, ex.y) );
 
     // crosshair
+    const x = game.pointer.realX;
+    const y0 = game.pointer.realY;
+    const y = y0 - (game.pointer.isTouch ? TOUCH_CROSSHAIR_OFFSET : 0);
+
     ctx.save();
     ctx.strokeStyle="#FFF"; ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.arc(game.pointer.x,game.pointer.y,10,0,Math.PI*2);
-    ctx.moveTo(game.pointer.x-15,game.pointer.y);
-    ctx.lineTo(game.pointer.x+15,game.pointer.y);
-    ctx.moveTo(game.pointer.x,game.pointer.y-15);
-    ctx.lineTo(game.pointer.x,game.pointer.y+15);
+    ctx.arc(x,y,10,0,Math.PI*2);
+    ctx.moveTo(x-15,y); ctx.lineTo(x+15,y);
+    ctx.moveTo(x,y-15); ctx.lineTo(x,y+15);
     ctx.stroke();
     ctx.restore();
   }
