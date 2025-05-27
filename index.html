@@ -15,10 +15,21 @@
     }
     #gameContainer { position:relative; width:100vw; height:100vh; }
     canvas { display:block; background:transparent; }
+
+    /* UI */
     #ui {
       position:absolute; top:10px; left:10px;
       color:#2F4F4F; font-weight:bold; z-index:10;
       text-shadow:2px 2px 4px rgba(255,255,255,0.8);
+    }
+    #levelIndicator {
+      position:absolute; inset:0;
+      display:flex; justify-content:center; align-items:center;
+      font-size:4em; color:#FFD700;
+      text-shadow:3px 3px 6px rgba(0,0,0,0.8);
+      opacity:0; pointer-events:none;
+      transition:opacity 0.5s;
+      z-index:15;
     }
     #startScreen,#gameOver {
       position:absolute; inset:0;
@@ -35,17 +46,8 @@
       transition:0.3s;
     }
     button:hover { background:#FF4500; transform:scale(1.05); }
-    #levelIndicator {
-      position:absolute; inset:0;
-      display:flex; justify-content:center; align-items:center;
-      font-size:4em; color:#FFD700;
-      text-shadow:3px 3px 6px rgba(0,0,0,0.8);
-      opacity:0; pointer-events:none;
-      transition:opacity 0.5s;
-      z-index:15;
-    }
 
-    /* ─── Mobile Controls ─── */
+    /* Mobile on-screen controls */
     #mobileControls {
       position: absolute;
       bottom: 20px;
@@ -56,17 +58,14 @@
       z-index: 30;
     }
     #mobileControls button {
-      width: 60px;
-      height: 60px;
-      border: none;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.6);
-      font-size: 1.5em;
-      touch-action: none;
+      width:60px; height:60px;
+      border:none; border-radius:50%;
+      background:rgba(255,255,255,0.6);
+      font-size:1.5em; touch-action:none;
     }
     /* hide on desktop-like devices */
     @media (hover: hover) and (pointer: fine) {
-      #mobileControls { display: none; }
+      #mobileControls { display:none; }
     }
   </style>
 </head>
@@ -129,23 +128,23 @@
   function makeNewGame(){
     return {
       score:0, level:1, lives:3, sudafed:0,
-      player:{ x:window.innerWidth/2-30, y:window.innerHeight-100, w:60, h:60 },
+      player:{ x:innerWidth/2-30, y:innerHeight-100, w:60, h:60 },
       enemies:[], powerUps:[], explosions:[],
-      pointer:{ x:window.innerWidth/2, y:window.innerHeight/2, cooldown:0 },
+      pointer:{ x:innerWidth/2, y:innerHeight/2, cooldown:0 },
       running:false
     };
   }
 
   function resize(){
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
     if(game) game.player.y = canvas.height - 100;
   }
 
 
   // ——— Input ———
   function setupInput(){
-    // Pointer events (mouse/touch/stylus)
+    // Pointer for mouse/touch
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
       game.pointer.x = e.clientX - r.left;
@@ -154,7 +153,7 @@
     canvas.addEventListener("pointerdown", e=>{ if(game.running) KEY.shoot=true; });
     canvas.addEventListener("pointerup",   e=>{ KEY.shoot=false; });
 
-    // Keyboard (desktop)
+    // Keyboard
     window.addEventListener("keydown", e=>{
       if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left=true;
       if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right=true;
@@ -166,11 +165,10 @@
       if(e.code==="Space") KEY.shoot=false;
     });
 
-    // Mobile buttons
+    // Mobile on-screen buttons
     const leftBtn  = document.getElementById('leftBtn');
     const rightBtn = document.getElementById('rightBtn');
     const shootBtn = document.getElementById('shootBtn');
-
     ['pointerdown','touchstart'].forEach(evt=>{
       leftBtn .addEventListener(evt,e=>{ e.preventDefault(); KEY.left=true; });
       rightBtn.addEventListener(evt,e=>{ e.preventDefault(); KEY.right=true; });
@@ -184,7 +182,7 @@
   }
 
 
-  // ——— Game Start / Restart ———
+  // ——— Start/Restart ———
   function startGame(){
     document.getElementById("startScreen").style.display="none";
     game = makeNewGame();
@@ -213,20 +211,32 @@
   // ——— Spawning ———
   function spawnEnemies(){
     if(!game.running) return;
-    const lvl = levels[Math.min(game.level-1,levels.length-1)];
-    // Create one enemy
+
+    // choose level config
+    let lvlConfig;
+    if (game.level <= levels.length) {
+      lvlConfig = levels[game.level-1];
+    } else if (game.level <= 6) {
+      lvlConfig = levels[levels.length-1]; // chickens
+    } else {
+      // after level 6: random from all types
+      lvlConfig = levels[Math.floor(Math.random()*levels.length)];
+    }
+
+    // create one enemy
     const e = {
       x: Math.random()*(canvas.width-40),
       y:-40, w:40, h:40,
-      type:lvl.type, emoji:lvl.emoji,
+      type:lvlConfig.type, emoji:lvlConfig.emoji,
       speed:2+game.level*0.5, vx:0, vy:0
     };
     if(e.type==="fur"){       e.vx=(Math.random()-0.5)*4; e.vy=2; }
     if(e.type==="bee"){       e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
     if(e.type==="chicken"){   e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
-    game.enemies.push(e);
 
-    setTimeout(spawnEnemies, Math.max(200, lvl.spawn - game.level*50));
+    game.enemies.push(e);
+    const delay = Math.max(200, lvlConfig.spawn - game.level*50);
+    setTimeout(spawnEnemies, delay);
   }
 
   function spawnPowerUps(){
@@ -270,25 +280,33 @@
     if(!KEY.shoot || game.pointer.cooldown>0) return;
     game.pointer.cooldown = 15; // frames until next shot
 
-    // Hit enemies
+    // Enemies
     game.enemies = game.enemies.filter(en=>{
       const dx = game.pointer.x - (en.x+en.w/2);
       const dy = game.pointer.y - (en.y+en.h/2);
-      if(Math.hypot(dx,dy) < 30+en.w/2){
-        let pts = {alligator:100,fur:50,bee:75,chicken:60}[en.type];
-        if(game.sudafed>0){ pts*=2; game.sudafed--; }
-        game.score += pts;
+      if(Math.hypot(dx,dy) < 30+en.w/2) {
+        // penalty for fur/bee
+        if(en.type==="fur"||en.type==="bee") {
+          const penalty = en.type==="fur"?50:75;
+          game.score = Math.max(0, game.score - penalty);
+        }
+        else {
+          // reward for alligator/chicken
+          let pts = {alligator:100,chicken:60}[en.type]||0;
+          if(game.sudafed>0){ pts*=2; game.sudafed--; }
+          game.score += pts;
+        }
         game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
         return false;
       }
       return true;
     });
 
-    // Tap to pick up stray pills
+    // Pills
     game.powerUps = game.powerUps.filter(p=>{
       const dx = game.pointer.x - (p.x+20);
       const dy = game.pointer.y - (p.y+20);
-      if(Math.hypot(dx,dy) < 30){
+      if(Math.hypot(dx,dy) < 30) {
         game.sudafed++;
         game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
         return false;
@@ -300,11 +318,12 @@
 
   // ——— Update Entities ———
   function updateEntities(){
-    // Cooldown
+    // cooldown
     if(game.pointer.cooldown>0) game.pointer.cooldown--;
 
     // Enemies
     game.enemies.forEach((en,i)=>{
+      // move
       if(en.vy||en.vx){
         en.x+=en.vx; en.y+=en.vy;
         if(en.x<0||en.x>canvas.width-en.w) en.vx*=-1;
@@ -317,8 +336,28 @@
         en.y < game.player.y+game.player.h &&
         en.y+en.h>game.player.y
       );
-      if(off||hit){
-        if(en.type==="alligator"||hit){
+
+      // collision
+      if(hit) {
+        if(en.type==="chicken") {
+          let pts = 60;
+          if(game.sudafed>0){ pts*=2; game.sudafed--; }
+          game.score += pts;
+          game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
+          game.enemies.splice(i,1);
+          return;
+        }
+        if(en.type==="alligator"||en.type==="fur"||en.type==="bee") {
+          game.lives--;
+          game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
+          game.enemies.splice(i,1);
+          return;
+        }
+      }
+
+      // off‐screen
+      if(off) {
+        if(en.type==="alligator") {
           game.lives--;
           game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
         }
@@ -326,18 +365,19 @@
       }
     });
 
-    // Power-ups (falling pills)
+    // Pills (falling)
     game.powerUps.forEach((p,i)=>{
-      p.y+=p.vy;
-      // Auto-collect if Tobias touches
+      p.y += p.vy;
       const dx = (p.x+20)-(game.player.x+game.player.w/2);
       const dy = (p.y+20)-(game.player.y+game.player.h/2);
-      if(Math.hypot(dx,dy)<game.player.w/2){
+      if(Math.hypot(dx,dy) < game.player.w/2) {
         game.sudafed++;
         game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
         game.powerUps.splice(i,1);
       }
-      else if(p.y>canvas.height) game.powerUps.splice(i,1);
+      else if(p.y>canvas.height) {
+        game.powerUps.splice(i,1);
+      }
     });
 
     // Explosions
@@ -345,11 +385,10 @@
   }
 
 
-  // ——— Rendering ———
+  // ——— Draw Everything ———
   function drawAll(){
     // Player
-    ctx.font="50px Arial";
-    ctx.textAlign="center";
+    ctx.font="50px Arial"; ctx.textAlign="center";
     ctx.fillText("🤠", game.player.x+game.player.w/2, game.player.y+game.player.h);
 
     // Enemies
@@ -382,24 +421,23 @@
   }
 
 
-  // ——— UI, Level & Game Over ———
+  // ——— UI, Levels & Game Over ———
   function updateUI(){
-    document.getElementById("score").textContent   = game.score;
-    document.getElementById("level").textContent   = game.level;
-    document.getElementById("lives").textContent   = game.lives;
-    document.getElementById("sudafed").textContent  = game.sudafed;
+    document.getElementById("score").textContent  = game.score;
+    document.getElementById("level").textContent  = game.level;
+    document.getElementById("lives").textContent  = game.lives;
+    document.getElementById("sudafed").textContent = game.sudafed;
   }
-
   function checkLevelUp(){
     if(game.score >= game.level*500){
-      game.level++; game.lives++;
+      game.level++;
+      game.lives++;
       showLevel();
     }
   }
-
   function checkGameOver(){
-    if(game.lives<=0){
-      game.running=false;
+    if(game.lives <= 0){
+      game.running = false;
       document.getElementById("finalScore").textContent = `Final Score: ${game.score}`;
       const msgs = [
         "Even Hurricane Tobias needs a break!",
@@ -408,9 +446,9 @@
         "Time for more Sudafed!",
         "The chickens won this round!"
       ];
-      document.getElementById("gameOverMessage")
-        .textContent = msgs[Math.floor(Math.random()*msgs.length)];
-      document.getElementById("gameOver").style.display="flex";
+      document.getElementById("gameOverMessage").textContent =
+        msgs[Math.floor(Math.random()*msgs.length)];
+      document.getElementById("gameOver").style.display = "flex";
     }
   }
 
