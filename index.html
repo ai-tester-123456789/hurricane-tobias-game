@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hurricane Tobias: Florida Man Survival</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:'Courier New',monospace;
+      background:linear-gradient(135deg,#87CEEB,#98FB98);
+      overflow:hidden;
+      user-select:none;
+      touch-action:none;
+    }
+    #gameContainer { position:relative; width:100vw; height:100vh; }
+    canvas { display:block; background:transparent; }
+    #ui {
+      position:absolute; top:10px; left:10px;
+      color:#2F4F4F; font-weight:bold; z-index:10;
+      text-shadow:2px 2px 4px rgba(255,255,255,0.8);
+    }
+    #startScreen,#gameOver {
+      position:absolute; inset:0;
+      background:rgba(0,0,0,0.8); color:white;
+      display:flex; flex-direction:column;
+      justify-content:center; align-items:center;
+      text-align:center; z-index:20;
+    }
+    button {
+      padding:15px 30px; font-size:1.2em;
+      background:#FF6347; color:white;
+      border:none; border-radius:10px;
+      cursor:pointer; margin:10px;
+      transition:0.3s;
+    }
+    button:hover { background:#FF4500; transform:scale(1.05); }
+    #levelIndicator {
+      position:absolute; inset:0;
+      display:flex; justify-content:center; align-items:center;
+      font-size:4em; color:#FFD700;
+      text-shadow:3px 3px 6px rgba(0,0,0,0.8);
+      opacity:0; pointer-events:none;
+      transition:opacity 0.5s;
+      z-index:15;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui">
+      Score: <span id="score">0</span><br>
+      Level: <span id="level">1</span><br>
+      Lives: <span id="lives">3</span><br>
+      Sudafed: <span id="sudafed">0</span>
+    </div>
+
+    <div id="levelIndicator"></div>
+
+    <div id="startScreen">
+      <h1>🌪️ HURRICANE TOBIAS 🌪️</h1>
+      <h2>Florida Man Survival Game</h2>
+      <p>🎯 Click/tap or Space to shoot • ←/A ▶/D to move Tobias</p>
+      <button onclick="startGame()">START GAME</button>
+    </div>
+
+    <div id="gameOver" style="display:none;">
+      <h1>GAME OVER</h1>
+      <p id="finalScore"></p>
+      <p id="gameOverMessage"></p>
+      <button onclick="restartGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+  // ——— Globals & Init ———
+  let canvas, ctx, game;
+  const KEY = { left:false, right:false, shoot:false };
+
+  const levels = [
+    { name:"Gator Yoinking",       emoji:"🐊", type:"alligator", spawn:2000 },
+    { name:"Husky Fur Storm",      emoji:"🐕", type:"fur",       spawn:1500 },
+    { name:"Angry Bees",           emoji:"🐝", type:"bee",       spawn:1000 },
+    { name:"Chicken Chase",        emoji:"🐔", type:"chicken",   spawn: 800 },
+  ];
+
+  function initGame(){
+    canvas = document.getElementById("gameCanvas");
+    ctx = canvas.getContext("2d");
+    resize();
+    window.addEventListener("resize", resize);
+    game = makeNewGame();
+    setupInput();
+  }
+
+  function makeNewGame(){
+    return {
+      score:0, level:1, lives:3, sudafed:0,
+      player:{ x:window.innerWidth/2-30, y:window.innerHeight-100, w:60, h:60 },
+      enemies:[], powerUps:[], explosions:[],
+      pointer:{ x:window.innerWidth/2, y:window.innerHeight/2, cooldown:0 },
+      running:false
+    };
+  }
+
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    if(game) game.player.y = canvas.height - 100;
+  }
+
+
+  // ——— Input ———
+  function setupInput(){
+    // Pointer events
+    canvas.addEventListener("pointermove", e=>{
+      const r = canvas.getBoundingClientRect();
+      game.pointer.x = e.clientX - r.left;
+      game.pointer.y = e.clientY - r.top;
+    });
+    canvas.addEventListener("pointerdown", e=>{
+      if(game.running) KEY.shoot = true;
+    });
+    canvas.addEventListener("pointerup", e=>{
+      KEY.shoot = false;
+    });
+    // Keyboard
+    window.addEventListener("keydown", e=>{
+      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left=true;
+      if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right=true;
+      if(e.code==="Space") KEY.shoot=true;
+    });
+    window.addEventListener("keyup", e=>{
+      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left=false;
+      if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right=false;
+      if(e.code==="Space") KEY.shoot=false;
+    });
+  }
+
+
+  // ——— Game Start / Restart ———
+  function startGame(){
+    document.getElementById("startScreen").style.display="none";
+    game = makeNewGame();
+    game.running = true;
+    showLevel();
+    spawnEnemies();
+    spawnPowerUps();
+    requestAnimationFrame(loop);
+  }
+  function restartGame(){
+    document.getElementById("gameOver").style.display="none";
+    startGame();
+  }
+
+
+  // ——— Level Indicator ———
+  function showLevel(){
+    const lvl = levels[Math.min(game.level-1,levels.length-1)];
+    const di = document.getElementById("levelIndicator");
+    di.innerHTML=`Level ${game.level}<br>${lvl.emoji} ${lvl.name}`;
+    di.style.opacity=1;
+    setTimeout(()=>di.style.opacity=0,2000);
+  }
+
+
+  // ——— Spawning ———
+  function spawnEnemies(){
+    if(!game.running) return;
+    const lvl = levels[Math.min(game.level-1,levels.length-1)];
+    // create one
+    const e = {
+      x: Math.random()*(canvas.width-40),
+      y:-40,
+      w:40,h:40,
+      type:lvl.type, emoji:lvl.emoji,
+      speed:2+game.level*0.5,
+      vx:0, vy:0
+    };
+    if(e.type==="fur"){ e.vx=(Math.random()-0.5)*4; e.vy=2; }
+    if(e.type==="bee"){ e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
+    if(e.type==="chicken"){ e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
+    game.enemies.push(e);
+
+    setTimeout(spawnEnemies, Math.max(200,lvl.spawn - game.level*50));
+  }
+  function spawnPowerUps(){
+    if(!game.running) return;
+    if(Math.random()<0.3){
+      game.powerUps.push({
+        x:Math.random()*(canvas.width-40),
+        y:-40, w:40,h:40,
+        vy:2+game.level*0.2
+      });
+    }
+    setTimeout(spawnPowerUps,5000);
+  }
+
+
+  // ——— Loop ———
+  function loop(){
+    if(!game.running) return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    handlePlayerMovement();
+    handleShooting();
+    updateEntities();
+    drawAll();
+    updateUI();
+    checkLevelUp();
+    checkGameOver();
+
+    requestAnimationFrame(loop);
+  }
+
+
+  // ——— Player & Shooting ———
+  function handlePlayerMovement(){
+    if(KEY.left)  game.player.x -= 5;
+    if(KEY.right) game.player.x += 5;
+    game.player.x = Math.max(0,Math.min(canvas.width-game.player.w, game.player.x));
+  }
+  function handleShooting(){
+    if(!KEY.shoot || game.pointer.cooldown>0) return;
+    game.pointer.cooldown = 15; // frames until next shot
+
+    // hit enemies
+    game.enemies = game.enemies.filter(en=>{
+      const dx = game.pointer.x - (en.x+en.w/2);
+      const dy = game.pointer.y - (en.y+en.h/2);
+      if(Math.hypot(dx,dy) < 30+en.w/2){
+        // award points
+        let pts = {alligator:100,fur:50,bee:75,chicken:60}[en.type];
+        if(game.sudafed>0){ pts*=2; game.sudafed--; }
+        game.score += pts;
+        game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
+        return false;
+      }
+      return true;
+    });
+
+    // pick up stray pills if you click them (bonus)
+    game.powerUps = game.powerUps.filter(p=>{
+      const dx = game.pointer.x - (p.x+20);
+      const dy = game.pointer.y - (p.y+20);
+      if(Math.hypot(dx,dy) < 30){
+        game.sudafed++;
+        game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
+        return false;
+      }
+      return true;
+    });
+  }
+
+
+  // ——— Update & Auto-Collect ———
+  function updateEntities(){
+    // cooldown
+    if(game.pointer.cooldown>0) game.pointer.cooldown--;
+
+    // enemies
+    game.enemies.forEach((en,i)=>{
+      if(en.vy || en.vx){
+        en.x += en.vx; en.y += en.vy;
+        if(en.x<0||en.x>canvas.width-en.w) en.vx*=-1;
+      } else {
+        en.y += en.speed;
+      }
+      // off-screen or player-hit
+      const off = en.y>canvas.height;
+      const hit = !off && (
+        en.x < game.player.x+game.player.w &&
+        en.x+en.w > game.player.x &&
+        en.y < game.player.y+game.player.h &&
+        en.y+en.h > game.player.y
+      );
+      if(off || hit){
+        if(en.type==="alligator" || hit){
+          game.lives--;
+          game.explosions.push({x:en.x+20,y:en.y+20, timer:10});
+        }
+        game.enemies.splice(i,1);
+      }
+    });
+
+    // powerUps (falling pills)
+    game.powerUps.forEach((p,i)=>{
+      p.y += p.vy;
+      // auto-pickup when Tobias touches it
+      const dx = (p.x+20) - (game.player.x+game.player.w/2);
+      const dy = (p.y+20) - (game.player.y+game.player.h/2);
+      if(Math.hypot(dx,dy) < game.player.w/2){
+        game.sudafed++;
+        game.explosions.push({x:p.x+20,y:p.y+20, timer:10});
+        game.powerUps.splice(i,1);
+      }
+      else if(p.y>canvas.height) {
+        game.powerUps.splice(i,1);
+      }
+    });
+
+    // explosions
+    game.explosions = game.explosions.filter(ex=>{
+      ex.timer--;
+      return ex.timer>0;
+    });
+  }
+
+
+  // ——— Rendering ———
+  function drawAll(){
+    // player
+    ctx.font="50px Arial";
+    ctx.textAlign="center";
+    ctx.fillText("🤠", game.player.x+game.player.w/2, game.player.y+game.player.h);
+
+    // enemies
+    game.enemies.forEach(en=>{
+      ctx.font="35px Arial";
+      ctx.fillText(en.emoji, en.x+en.w/2, en.y+en.h);
+    });
+
+    // pills
+    game.powerUps.forEach(p=>{
+      ctx.font="30px Arial";
+      ctx.fillText("💊", p.x+20, p.y+30);
+    });
+
+    // explosions
+    ctx.font="40px Arial";
+    game.explosions.forEach(ex=>{
+      ctx.fillText("💥", ex.x, ex.y);
+    });
+
+    // crosshair
+    drawCrosshair();
+  }
+  function drawCrosshair(){
+    ctx.save();
+    ctx.strokeStyle="#FFF"; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(game.pointer.x,game.pointer.y,10,0,Math.PI*2);
+    ctx.moveTo(game.pointer.x-15,game.pointer.y);
+    ctx.lineTo(game.pointer.x+15,game.pointer.y);
+    ctx.moveTo(game.pointer.x,game.pointer.y-15);
+    ctx.lineTo(game.pointer.x,game.pointer.y+15);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+
+  // ——— UI, Level & Game Over ———
+  function updateUI(){
+    document.getElementById("score").textContent = game.score;
+    document.getElementById("level").textContent = game.level;
+    document.getElementById("lives").textContent = game.lives;
+    document.getElementById("sudafed").textContent = game.sudafed;
+  }
+  function checkLevelUp(){
+    if(game.score >= game.level*500){
+      game.level++;
+      game.lives++;
+      showLevel();
+    }
+  }
+  function checkGameOver(){
+    if(game.lives<=0){
+      game.running=false;
+      document.getElementById("finalScore").textContent = `Final Score: ${game.score}`;
+      const msgs = [
+        "Even Hurricane Tobias needs a break!",
+        "The bees were too aggressive!",
+        "Those fur balls got the best of you!",
+        "Time for more Sudafed!",
+        "The chickens won this round!"
+      ];
+      document.getElementById("gameOverMessage")
+        .textContent = msgs[Math.floor(Math.random()*msgs.length)];
+      document.getElementById("gameOver").style.display="flex";
+    }
+  }
+
+  window.addEventListener("load", initGame);
+  </script>
+</body>
+</html>
