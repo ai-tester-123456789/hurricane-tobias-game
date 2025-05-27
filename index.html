@@ -5,81 +5,43 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Hurricane Tobias: Florida Man Survival</title>
   <style>
+    /* … your existing CSS … */
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
       font-family:'Courier New',monospace;
       background:linear-gradient(135deg,#87CEEB,#98FB98);
-      overflow:hidden;
-      user-select:none;
-      touch-action:none;
+      overflow:hidden; user-select:none; touch-action:none;
     }
     #gameContainer { position:relative; width:100vw; height:100vh; }
     canvas { display:block; background:transparent; }
-
-    /* UI */
-    #ui {
-      position:absolute; top:10px; left:10px;
-      color:#2F4F4F; font-weight:bold; z-index:10;
-      text-shadow:2px 2px 4px rgba(255,255,255,0.8);
-    }
-    #levelIndicator {
-      position:absolute; inset:0;
-      display:flex; justify-content:center; align-items:center;
-      font-size:4em; color:#FFD700;
-      text-shadow:3px 3px 6px rgba(0,0,0,0.8);
-      opacity:0; pointer-events:none;
-      transition:opacity 0.5s;
-      z-index:15;
-    }
-    #startScreen,#gameOver {
-      position:absolute; inset:0;
-      background:rgba(0,0,0,0.8); color:white;
-      display:flex; flex-direction:column;
-      justify-content:center; align-items:center;
-      text-align:center; z-index:20;
-    }
-    button {
-      padding:15px 30px; font-size:1.2em;
-      background:#FF6347; color:white;
-      border:none; border-radius:10px;
-      cursor:pointer; margin:10px;
-      transition:0.3s;
-    }
-    button:hover { background:#FF4500; transform:scale(1.05); }
+    #ui { position:absolute; top:10px; left:10px; color:#2F4F4F; font-weight:bold; z-index:10; text-shadow:2px 2px 4px rgba(255,255,255,0.8);}
+    #levelIndicator { /* … */ }
+    #startScreen,#gameOver { /* … */ }
+    button { /* … */ }
+    button:hover { /* … */ }
 
     /* Mobile on-screen controls */
     #mobileControls {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: calc(env(safe-area-inset-bottom,20px) + 50px);
-      display: flex;
-      gap: 20px;
-      z-index: 30;
+      position:absolute;
+      left:50%; transform:translateX(-50%);
+      bottom:calc(env(safe-area-inset-bottom,20px)+50px);
+      display:flex; gap:20px; z-index:30;
     }
     #mobileControls button {
-      width:60px; height:60px;
-      border:none; border-radius:50%;
-      background:rgba(255,255,255,0.6);
-      font-size:1.5em; touch-action:none;
+      width:60px; height:60px; border:none; border-radius:50%;
+      background:rgba(255,255,255,0.6); font-size:1.5em; touch-action:none;
     }
-    @media (hover: hover) and (pointer: fine) {
-      #mobileControls { display:none; }
-    }
+    @media(hover:hover)and(pointer:fine){ #mobileControls{display:none;} }
   </style>
 </head>
 <body>
   <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Background music -->
-    <audio
-      id="bgMusic"
-      src="https://suno.com/song/0c710bf5-e07e-4160-9a30-082860458329?sh=NWV1sZ4XCtsFdoJk"
-      preload="auto"
-      loop
-      crossorigin="anonymous"
-    ></audio>
+    <!-- Make sure this URL points to an actual .mp3 or .wav file -->
+    <audio id="bgMusic"
+      src="https://your-direct-mp3-url/example.mp3"
+      preload="auto" loop crossorigin="anonymous"></audio>
 
     <div id="ui">
       Score: <span id="score">0</span><br>
@@ -112,10 +74,11 @@
   </div>
 
   <script>
-  // ——— Constants & Globals ———
+  // ─── Constants & Globals ───
   const TOUCH_CROSSHAIR_OFFSET = 80;
   let canvas, ctx, game;
   const KEY = { left:false, right:false, shoot:false };
+
   const levels = [
     { name:"Gator Yoinking",  emoji:"🐊", type:"alligator", spawn:2000 },
     { name:"Husky Fur Storm", emoji:"🐕", type:"fur",       spawn:1500 },
@@ -123,54 +86,55 @@
     { name:"Chicken Chase",   emoji:"🐔", type:"chicken",   spawn: 800 },
   ];
 
-  // ——— Initialization ———
+  // ─── Init ───
   function initGame(){
     canvas = document.getElementById("gameCanvas");
-    ctx = canvas.getContext("2d");
+    ctx    = canvas.getContext("2d");
     resize();
     window.addEventListener("resize", resize);
     setupInput();
-    unlockAudio(); // unlock on first touch
+    unlockAudio();            // Unlock on first touch
     game = makeNewGame();
   }
 
   function makeNewGame(){
     return {
-      score:0,
-      level:1,
-      lives:3,
-      sudafed:0,
-      bonusTimer:0,
-      lastTime:0,
+      score:0, level:1, lives:3, sudafed:0,
+      bonusTimer:0, lastTime:0,
       player:{ x:innerWidth/2-30, y:innerHeight-100, w:60, h:60 },
       enemies:[], powerUps:[], explosions:[],
-      pointer:{ realX:innerWidth/2, realY:innerHeight/2, isTouch:false, cooldown:0 },
+      pointer:{
+        realX:innerWidth/2,
+        realY:innerHeight/2,
+        isTouch:false,
+        cooldown:0
+      },
       running:false
     };
   }
 
   function resize(){
-    canvas.width = innerWidth;
+    canvas.width  = innerWidth;
     canvas.height = innerHeight;
     if(game) game.player.y = canvas.height - 100;
   }
 
-  // ——— Audio Unlock Hack ———
+  // ─── Audio Unlock Hack ───
   function unlockAudio(){
-    const bg = document.getElementById('bgMusic');
-    function onceTouch(){
-      bg.play().then(()=> {
+    const bg = document.getElementById("bgMusic");
+    function onceTouch(e){
+      bg.play().then(()=>{
         bg.pause();
         bg.currentTime = 0;
       }).catch(()=>{});
-      document.body.removeEventListener('touchstart', onceTouch);
+      document.body.removeEventListener("touchstart", onceTouch);
     }
-    document.body.addEventListener('touchstart', onceTouch, { passive:false });
+    document.body.addEventListener("touchstart", onceTouch, { passive:false });
   }
 
-  // ——— Input Handling ———
+  // ─── Input ───
   function setupInput(){
-    // Pointer events
+    // Pointer
     canvas.addEventListener("pointermove", e=>{
       const r = canvas.getBoundingClientRect();
       game.pointer.realX   = e.clientX - r.left;
@@ -184,34 +148,34 @@
       game.pointer.isTouch = e.pointerType === "touch";
       if(game.running) KEY.shoot = true;
     });
-    canvas.addEventListener("pointerup", e=>{ KEY.shoot = false; });
+    canvas.addEventListener("pointerup", ()=>KEY.shoot = false);
 
     // Keyboard
     window.addEventListener("keydown", e=>{
-      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left  = true;
+      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left = true;
       if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right = true;
       if(e.code==="Space")                      KEY.shoot = true;
     });
     window.addEventListener("keyup", e=>{
-      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left  = false;
+      if(e.code==="ArrowLeft"||e.code==="KeyA") KEY.left = false;
       if(e.code==="ArrowRight"||e.code==="KeyD") KEY.right = false;
       if(e.code==="Space")                      KEY.shoot = false;
     });
 
     // Mobile buttons
     ['pointerdown','touchstart'].forEach(evt=>{
-      document.getElementById('leftBtn') .addEventListener(evt,e=>{ e.preventDefault(); KEY.left  = true; });
-      document.getElementById('rightBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.right = true; });
-      document.getElementById('shootBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = true; });
+      document.getElementById("leftBtn").addEventListener(evt, e=>{ e.preventDefault(); KEY.left = true; });
+      document.getElementById("rightBtn").addEventListener(evt,e=>{ e.preventDefault(); KEY.right = true; });
+      document.getElementById("shootBtn").addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = true; });
     });
     ['pointerup','pointercancel','touchend','touchcancel'].forEach(evt=>{
-      document.getElementById('leftBtn') .addEventListener(evt,e=>{ e.preventDefault(); KEY.left  = false; });
-      document.getElementById('rightBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.right = false; });
-      document.getElementById('shootBtn').addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = false; });
+      document.getElementById("leftBtn").addEventListener(evt, e=>{ e.preventDefault(); KEY.left = false; });
+      document.getElementById("rightBtn").addEventListener(evt,e=>{ e.preventDefault(); KEY.right = false; });
+      document.getElementById("shootBtn").addEventListener(evt,e=>{ e.preventDefault(); KEY.shoot = false; });
     });
   }
 
-  // ——— Start & Restart ———
+  // ─── Start / Restart ───
   function startGame(){
     document.getElementById("startScreen").style.display = "none";
     game = makeNewGame();
@@ -221,7 +185,8 @@
     spawnPowerUps();
     game.lastTime = performance.now();
 
-    const bg = document.getElementById('bgMusic');
+    // play music inside click handler
+    const bg = document.getElementById("bgMusic");
     bg.volume = 0.5;
     bg.play().catch(()=>{});
 
@@ -232,19 +197,19 @@
     startGame();
   }
 
-  // ——— Level Indicator ———
+  // ─── Level Indicator ───
   function showLevel(){
-    const lvl = levels[Math.min(game.level-1, levels.length-1)];
+    const cfg = levels[Math.min(game.level-1, levels.length-1)];
     const di = document.getElementById("levelIndicator");
-    di.innerHTML = `Level ${game.level}<br>${lvl.emoji} ${lvl.name}`;
+    di.innerHTML  = `Level ${game.level}<br>${cfg.emoji} ${cfg.name}`;
     di.style.opacity = 1;
     setTimeout(()=> di.style.opacity = 0, 2000);
   }
 
-  // ——— Spawning ———
+  // ─── Spawning ───
   function spawnEnemies(){
     if(!game.running) return;
-    let cfg = game.level <= levels.length
+    let cfg = (game.level <= levels.length)
       ? levels[game.level-1]
       : levels[Math.floor(Math.random()*levels.length)];
 
@@ -252,15 +217,17 @@
       x: Math.random()*(canvas.width-40),
       y:-40, w:40, h:40,
       type:cfg.type, emoji:cfg.emoji,
-      speed:2+game.level*0.5, vx:0, vy:0
+      speed:2+game.level*0.5,
+      vx:0, vy:0
     };
-    if(e.type==="fur"){       e.vx=(Math.random()-0.5)*4; e.vy=2; }
-    if(e.type==="bee"){       e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
-    if(e.type==="chicken"){   e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
+    if(e.type==="fur")     { e.vx=(Math.random()-0.5)*4; e.vy=2; }
+    if(e.type==="bee")     { e.vx=(Math.random()-0.5)*6; e.vy=1+Math.random()*3; }
+    if(e.type==="chicken"){ e.vx=(Math.random()-0.5)*3; e.vy=1.5; }
 
     game.enemies.push(e);
     setTimeout(spawnEnemies, Math.max(200, cfg.spawn - game.level*50));
   }
+
   function spawnPowerUps(){
     if(!game.running) return;
     if(Math.random()<0.3){
@@ -273,13 +240,13 @@
     setTimeout(spawnPowerUps, 5000);
   }
 
-  // ——— Main Loop ———
+  // ─── Main Loop ───
   function loop(now){
     if(!game.running) return;
     const delta = now - game.lastTime;
     game.lastTime = now;
 
-    // bonus points
+    // bonus +50 every 3s
     game.bonusTimer += delta;
     if(game.bonusTimer >= 3000){
       game.bonusTimer -= 3000;
@@ -298,16 +265,24 @@
     requestAnimationFrame(loop);
   }
 
-  // ——— Player & Shooting ———
+  // ─── Player & Shooting ───
   function handlePlayerMovement(){
     if(KEY.left)  game.player.x -= 5;
     if(KEY.right) game.player.x += 5;
     game.player.x = Math.max(0, Math.min(canvas.width-game.player.w, game.player.x));
   }
+
   function handleShooting(){
     if(!KEY.shoot || game.pointer.cooldown>0) return;
     game.pointer.cooldown = 15;
-    const px = game.pointer.realX, py = game.pointer.realY;
+
+    // use crosshair coords on touch
+    const px = game.pointer.isTouch
+      ? game.pointer.realX
+      : game.pointer.realX;
+    const py = game.pointer.isTouch
+      ? game.pointer.realY - TOUCH_CROSSHAIR_OFFSET
+      : game.pointer.realY;
 
     game.enemies = game.enemies.filter(en=>{
       const dx = px - (en.x+en.w/2), dy = py - (en.y+en.h/2);
@@ -338,23 +313,24 @@
     });
   }
 
-  // ——— Update Entities ———
+  // ─── Update Entities ───
   function updateEntities(){
     if(game.pointer.cooldown>0) game.pointer.cooldown--;
 
     game.enemies.forEach((en,i)=>{
       if(en.vy||en.vx){
-        en.x+=en.vx; en.y+=en.vy;
+        en.x += en.vx; en.y += en.vy;
         if(en.x<0||en.x>canvas.width-en.w) en.vx*=-1;
-      } else en.y+=en.speed;
+      } else en.y += en.speed;
 
       const off = en.y>canvas.height;
-      const hit = !off && (
+      const hit =
+        !off &&
         en.x < game.player.x+game.player.w &&
         en.x+en.w>game.player.x &&
         en.y < game.player.y+game.player.h &&
-        en.y+en.h>game.player.y
-      );
+        en.y+en.h>game.player.y;
+
       if(hit){
         if(en.type==="chicken"){
           let pts = 60;
@@ -392,10 +368,11 @@
     game.explosions = game.explosions.filter(ex=>--ex.timer>0);
   }
 
-  // ——— Draw Everything ———
+  // ─── Draw ───
   function drawAll(){
     ctx.font="50px Arial"; ctx.textAlign="center";
     ctx.fillText("🤠", game.player.x+game.player.w/2, game.player.y+game.player.h);
+
     game.enemies.forEach(en=>{
       ctx.font="35px Arial"; ctx.fillText(en.emoji, en.x+en.w/2, en.y+en.h);
     });
@@ -404,10 +381,14 @@
     });
     ctx.font="40px Arial";
     game.explosions.forEach(ex=> ctx.fillText("💥", ex.x, ex.y));
-    // Draw crosshair above touch
+
+    // Custom crosshair
     const x = game.pointer.realX;
     const y0 = game.pointer.realY;
-    const y  = y0 - (game.pointer.isTouch ? TOUCH_CROSSHAIR_OFFSET : 0);
+    const y  = game.pointer.isTouch
+      ? y0 - TOUCH_CROSSHAIR_OFFSET
+      : y0;
+
     ctx.save();
     ctx.strokeStyle="#FFF"; ctx.lineWidth=2;
     ctx.beginPath();
@@ -418,13 +399,14 @@
     ctx.restore();
   }
 
-  // ——— UI & Game Over ———
+  // ─── UI & Game Over ───
   function updateUI(){
     document.getElementById("score").textContent  = game.score;
     document.getElementById("level").textContent  = game.level;
     document.getElementById("lives").textContent  = game.lives;
     document.getElementById("sudafed").textContent = game.sudafed;
   }
+
   function checkLevelUp(){
     if(game.score >= game.level*500){
       game.level++;
@@ -432,11 +414,13 @@
       showLevel();
     }
   }
+
   function checkGameOver(){
     if(game.lives <= 0){
       game.running = false;
-      document.getElementById('bgMusic').pause();
-      document.getElementById("finalScore").textContent = `Final Score: ${game.score}`;
+      document.getElementById("bgMusic").pause();
+      document.getElementById("finalScore").textContent =
+        `Final Score: ${game.score}`;
       const msgs = [
         "Even Hurricane Tobias needs a break!",
         "The bees were too aggressive!",
